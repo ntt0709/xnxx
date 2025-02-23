@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alarm System</title>
+    <script>
+        function setAlarm() {
+            let time = document.getElementById("alarmTime").value;
+            fetch("/set_alarm?time=" + time)
+                .then(response => response.text())
+                .then(data => alert(data));
+        }
+    </script>
+</head>
+<body>
+    <h2>Set an Alarm</h2>
+    <input type="time" id="alarmTime">
+    <button onclick="setAlarm()">Set Alarm</button>
+</body>
+</html>
+#include "crow.h"
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+std::string alarm_time = "";
+
+void check_alarm() {
+    while (true) {
+        auto t = std::time(nullptr);
+        auto now = *std::localtime(&t);
+
+        char current_time[6];
+        std::strftime(current_time, sizeof(current_time), "%H:%M", &now);
+
+        if (alarm_time == current_time) {
+            std::cout << "ALARM! Time is: " << alarm_time << std::endl;
+            // You can add sound or hardware trigger code here
+            alarm_time = ""; // Reset after triggering
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(30)); // Check every 30s
+    }
+}
+
+int main() {
+    crow::SimpleApp app;
+
+    CROW_ROUTE(app, "/set_alarm")
+        .methods("GET"_method)
+        ([](const crow::request& req) {
+            auto query = crow::query_string(req.url_params);
+            alarm_time = query.get("time") ? query.get("time") : "";
+
+            if (!alarm_time.empty()) {
+                return crow::response(200, "Alarm set for: " + alarm_time);
+            }
+            return crow::response(400, "Invalid time");
+        });
+
+    std::thread alarm_thread(check_alarm); // Run alarm check in a separate thread
+
+    app.port(8080).multithreaded().run();
+}
+g++ -o server server.cpp -lpthread
+./server
